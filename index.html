@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OneApp">
+<title>OneApp</title>
+<style>
+:root{color-scheme:dark;--bg:#0e1116;--panel:#161b23;--line:#2a3140;--text:#e6ebf3;--muted:#8b96a9;--accent:#4d8df7;--app-h:100dvh}
+*{box-sizing:border-box}
+/* 黒帯対策：html の高さは 100% ではなく 100dvh（測れたら px で上書き） */
+html{margin:0;padding:0;width:100%;height:var(--app-h,100dvh);overflow:hidden;background:var(--bg);overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:pan-x pan-y}
+body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,sans-serif;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;touch-action:pan-x pan-y;-webkit-user-select:none;user-select:none}
+/* 起動直後のちらつき防止（初期化が終わるまで中身を隠す） */
+body.booting #stage{visibility:hidden}
+button,input,textarea{font:inherit;font-size:16px}
+button{border:1px solid var(--line);border-radius:12px;padding:11px 13px;min-height:44px;background:#1b212b;color:var(--text);font-weight:650;-webkit-tap-highlight-color:transparent}
+button:active{background:#242c3a}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:active{background:#3f7ce0}
+button.danger{color:#ff9aa8;background:#2a161c;border-color:#4d2530}
+input[type=text],textarea{width:100%;max-width:100%;min-width:0;border:1px solid var(--line);border-radius:11px;padding:12px;background:#0d1015;color:var(--text);font-size:16px!important;line-height:1.5;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+input::placeholder,textarea::placeholder{color:#5a6478}
+textarea{resize:vertical}
+/* #app は position:fixed を使わない。html の高さにそのまま追従させる */
+#app{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg)}
+/* スクロール内容側で Safe Area を1回だけ加算 */
+#stage{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;background:var(--bg);padding:calc(20px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px))}
+.card{max-width:560px;width:100%;margin:0 auto 14px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px;box-shadow:0 8px 28px #00000055}
+h1{font-size:21px;margin:0}h2{font-size:15px;margin:0}p,.hint{font-size:13px;line-height:1.6;color:var(--muted);margin:0}
+.step{margin:0;font-size:14px;font-weight:600;color:var(--text);line-height:1.6}
+.field{display:flex;flex-direction:column;gap:7px}
+.field label{font-size:13px;font-weight:650;color:#a9b4c6}
+#iconPreview{flex:none!important;width:76px;height:76px;aspect-ratio:1/1;object-fit:cover;border-radius:18px;border:1px solid var(--line);background:#0d1015}
+#htmlSetup{height:40vh;min-height:220px;font-family:ui-monospace,monospace;font-size:16px;line-height:1.45}
+/* HTML実行：runtime は #app 内の絶対配置 */
+#runtime{position:absolute;inset:0;display:none;background:var(--bg)}
+#runner{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#fff}
+#edge{position:absolute;z-index:20;right:0;top:calc(50% - 60px);width:28px;height:120px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;touch-action:pan-y;-webkit-tap-highlight-color:transparent}
+#edge::before{content:"";position:absolute;right:0;top:12px;bottom:12px;width:3px;border-radius:3px 0 0 3px;background:#ffffff1f;transition:width .18s,background .18s}
+#edge.pull::before,#edge:active::before{width:5px;background:#4d8df7b3}
+#drawer{position:absolute;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;transform:translateX(102%);transition:transform .23s}
+#drawer.open{transform:translateX(0)}
+#head{flex:none;display:flex;justify-content:space-between;align-items:center;padding:calc(9px + env(safe-area-inset-top,0px)) 14px 9px;background:#11151b;border-bottom:1px solid var(--line)}
+#head strong{font-size:17px}#close{min-height:38px;padding:7px 12px}
+#tabs{flex:none;display:flex;gap:5px;padding:8px;background:#11151b;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+#tabs::-webkit-scrollbar{display:none}
+.tab{flex:1;min-width:0;white-space:nowrap;font-size:12px;padding:8px 5px;min-height:40px}
+.tab.active{background:#17263f;color:#a9c8ff;border-color:#2f4f86}
+#panels{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px 12px calc(20px + env(safe-area-inset-bottom,0px))}
+.panel{display:none;max-width:650px;width:100%;margin:auto;flex-direction:column;gap:12px}
+.panel.active{display:flex}
+.section{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1;min-width:0}
+#memo{height:36vh;min-height:230px;max-height:58vh;font-family:-apple-system,sans-serif}
+#htmlCode{height:46vh;min-height:220px;font-family:ui-monospace,monospace;font-size:16px;line-height:1.45}
+.count{text-align:right;font-size:12px;color:var(--muted)}
+#storageBar{height:9px;border-radius:9px;background:#212a38;overflow:hidden}
+#storageFill{height:100%;width:0;background:var(--accent);transition:width .3s}
+#shade{position:absolute;inset:0;z-index:30;background:#00000066;display:none}
+#shade.show{display:block}
+#toast{position:absolute;z-index:60;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:#e6ebf3;color:#10141a;padding:10px 15px;border-radius:30px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%;text-align:center}
+#toast.show{opacity:1}
+[hidden]{display:none!important}</style></head><body class="booting">
+<div id="app">
+<div id="stage">
+<section class="card" id="setup">
+<h1>OneApp</h1>
+<div class="field">
+<label for="setupName">① アプリ名を入力</label>
+<input id="setupName" type="text" maxlength="60">
+</div>
+<div class="field">
+<label>② アプリアイコンを登録</label>
+<div class="row" style="align-items:center">
+<img id="iconPreview" alt="アイコン">
+<input id="iconFile" type="file" accept="image/*" style="flex:2">
+</div>
+</div>
+<p class="step">③ Safariの共有ボタン <b>「共有」</b> をタップ</p>
+<p class="step">④ メニューから<b>「ホーム画面に追加」</b>を選択</p>
+<p class="step">⑤ 追加したアイコンから起動してHTMLを登録</p>
+</section>
+<section class="card" id="htmlStep" hidden>
+<h1>HTMLを登録</h1>
+<textarea id="htmlSetup" spellcheck="false" placeholder="&lt;!doctype html&gt; から始まるHTML"></textarea>
+<div id="setupCount" class="count">0文字</div>
+<button class="primary" id="firstSave">HTMLを保存して開始</button>
+</section>
+</div>
+<div id="runtime"><iframe id="runner" title="登録HTML"></iframe></div>
+<div id="shade"></div>
+<aside id="drawer">
+<header id="head"><strong>OneApp</strong><button id="close">閉じる ✕</button></header>
+<nav id="tabs"><button class="tab active" data-panel="memoPanel">改善メモ</button><button class="tab" data-panel="htmlPanel">HTML編集</button><button class="tab" data-panel="backupPanel">バックアップ</button></nav>
+<div id="panels">
+<section class="panel active" id="memoPanel"><div class="section"><h2>改善メモ</h2><textarea id="memo" maxlength="10000" placeholder="改善したい点を箇条書きで入力してください。自動保存されます。"></textarea><div id="memoCount" class="count">0 / 10,000文字</div><div class="row"><button class="danger" id="clearMemo">クリア</button><button class="primary" id="improve">AIに改善依頼</button></div></div></section>
+<section class="panel" id="htmlPanel"><div class="section"><h2>HTML編集</h2><textarea id="htmlCode" spellcheck="false" placeholder="HTMLコード"></textarea><div id="htmlCount" class="count">0文字</div><div class="row"><button class="primary" id="saveHtml">保存して開く</button><button id="copyHtml">HTMLコピー</button></div><div class="row"><button id="clearHtml">クリア</button><button id="restoreHtml">1つ前に戻す</button></div></div></section>
+<section class="panel" id="backupPanel">
+<div class="section"><h2>バックアップ・復元</h2><div class="row"><button id="export">JSONを書き出す</button><button id="import">JSONを読み込む</button></div><input id="backupFile" type="file" accept=".json,application/json" hidden><p class="hint">管理データ、HTML、直前のHTML、改善メモ、アイコン、取得可能なlocalStorageを保存します。HTML側のIndexedDBは汎用的な完全バックアップを保証できません。</p></div>
+<div class="section"><h2>ストレージ使用量（推定）</h2><div id="storageText" class="hint">—</div><div id="storageBar"><div id="storageFill"></div></div></div>
+</section>
+</div></aside>
+<button id="edge" aria-label="管理画面を開く"></button>
+<div id="toast"></div>
+</div>
+<script>
+(()=>{'use strict';
+const DB='html-app-manager-v2',STORE='s',KEY='main',$=id=>document.getElementById(id);
+const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+
+/* 拡大（ピンチズーム・ダブルタップズーム）を無効化 */
+['gesturestart','gesturechange','gestureend'].forEach(function(t){
+  document.addEventListener(t,function(e){if(e.cancelable)e.preventDefault()},{passive:false});
+});
+let lastTapEnd=0;
+document.addEventListener('touchend',function(e){
+  const now=Date.now();
+  const editing=e.target&&e.target.closest&&e.target.closest('input,textarea');
+  if(now-lastTapEnd<=320&&!editing&&e.cancelable)e.preventDefault();
+  lastTapEnd=now;
+},{passive:false});
+
+/* 黒帯対策：実画面高を測って html の高さ（--app-h）に反映する */
+const root=document.documentElement;
+function measureInsets(){
+  const probe=document.createElement('div');
+  probe.style.cssText='position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);';
+  document.body.appendChild(probe);
+  const cs=getComputedStyle(probe);
+  const top=parseFloat(cs.paddingTop)||0;
+  const bottom=parseFloat(cs.paddingBottom)||0;
+  probe.remove();
+  return {top:top,bottom:bottom};
+}
+function syncAppHeight(){
+  if(!standalone){root.style.removeProperty('--app-h');return}
+  const ins=measureInsets();
+  let h=(window.innerHeight||0)+ins.top+ins.bottom;
+  const scr=window.screen||{};
+  const scrMax=Math.max(scr.height||0,scr.width||0);
+  if(scrMax>0)h=Math.min(h,scrMax);
+  if(!isFinite(h)||h<=0)return;
+  root.style.setProperty('--app-h',Math.round(h)+'px');
+}
+function relayout(){syncAppHeight()}
+window.addEventListener('resize',relayout);
+window.addEventListener('orientationchange',()=>setTimeout(relayout,120));
+window.addEventListener('pageshow',relayout);
+if(window.visualViewport)window.visualViewport.addEventListener('resize',relayout);
+syncAppHeight();
+setTimeout(relayout,260);
+window.addEventListener('load',()=>setTimeout(relayout,100));
+/* 万一の初期化失敗でも画面が真っ暗にならないようにする保険 */
+setTimeout(()=>document.body.classList.remove('booting'),1500);
+
+let db,s={name:'',icon:'',html:'',previousHtml:'',memo:''},memoTimer,toastTimer,ex=null,ey=null;
+const iconDefault='data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#1c2330"><text x="50" y="67" text-anchor="middle" font-size="55" fill="#4d8df7">▣</text></rect></svg>');
+function toast(t){$('toast').textContent=t;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),2300)}
+function openDB(){return new Promise((ok,no)=>{let r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
+function get(){return new Promise((ok,no)=>{let r=db.transaction(STORE).objectStore(STORE).get(KEY);r.onsuccess=()=>ok(r.result||null);r.onerror=()=>no(r.error)})}
+function put(){return new Promise((ok,no)=>{let t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(s,KEY);t.oncomplete=ok;t.onerror=()=>no(t.error)})}
+function meta(){const n=s.name||'OneApp';document.title=n;let m=document.querySelector('meta[name="apple-mobile-web-app-title"]');if(m)m.content=n;if(s.icon){let l=document.querySelector('link[rel="apple-touch-icon"]');if(!l){l=document.createElement('link');l.rel='apple-touch-icon';document.head.append(l)}l.href=s.icon}}
+function stage(which){$('setup').hidden=which!=='setup';$('htmlStep').hidden=which!=='html';$('stage').hidden=which==='run';$('runtime').style.display=which==='run'?'block':'none';$('edge').style.display=(which==='run'&&standalone)?'block':'none'}
+
+/* 改善メモ：各行の頭に自動で「・」を付ける */
+function memoBullet(v){
+  const text=String(v==null?'':v);
+  if(!text.trim())return '・';
+  const lines=text.split('\n').map(function(line){
+    const body=line.replace(/^[\s\u3000・•･]+/,'').replace(/[\s\u3000]+$/,'');
+    return body?'・'+body:'';
+  });
+  return lines.join('\n');
+}
+
+function render(){
+  $('setupName').value=s.name;
+  $('iconPreview').src=s.icon||iconDefault;
+  $('memo').value=memoBullet(s.memo);
+  $('htmlCode').value=s.html;$('htmlSetup').value=s.html;
+  counts();meta();relayout();
+  if(standalone){
+    if(s.html){$('runner').srcdoc=s.html;stage('run')}else stage('html');
+  }else stage('setup');
+  document.body.classList.remove('booting');
+}
+function counts(){$('setupCount').textContent=[...$('htmlSetup').value].length.toLocaleString()+'文字';$('htmlCount').textContent=[...$('htmlCode').value].length.toLocaleString()+'文字';$('memoCount').textContent=[...$('memo').value].length.toLocaleString()+' / 10,000文字'}
+function drawerOpen(){if(!standalone||!s.html)return;$('drawer').classList.add('open');$('shade').classList.add('show');$('edge').style.display='none'}
+function drawerClose(){$('drawer').classList.remove('open');$('shade').classList.remove('show');$('edge').style.display=(standalone&&s.html)?'block':'none'}
+function tab(id){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.panel===id));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id));$('panels').scrollTop=0;if(id==='backupPanel')storage()}
+async function png(f){let b=await createImageBitmap(f),z=Math.min(b.width,b.height),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,(b.width-z)/2,(b.height-z)/2,z,z,0,0,512,512);return c.toDataURL('image/png')}
+async function chooseIcon(f){if(!f)return;try{s.icon=await png(f);$('iconPreview').src=s.icon;meta();toast('アイコンを登録しました')}catch{toast('画像を読み込めませんでした')}}
+function bytes(n){let u=['B','KB','MB','GB'],i=0;while(n>=1024&&i<3){n/=1024;i++}return n.toFixed(i?1:0)+' '+u[i]}
+async function storage(){try{let e=await navigator.storage.estimate(),u=e.usage||0,q=e.quota||0,p=q?100*u/q:0;$('storageText').textContent=`推定使用量 ${bytes(u)} ／ 割当量 ${bytes(q)}（${p.toFixed(1)}%）`;$('storageFill').style.width=Math.min(100,p)+'%'}catch{$('storageText').textContent='取得できません'}}
+function download(blob,name){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500)}
+function localData(){try{return Object.fromEntries(Object.keys(localStorage).map(k=>[k,localStorage.getItem(k)]).filter(([k])=>!k.startsWith('__manager_')))}catch{return null}}
+async function saveHtml(){let v=$('htmlCode').value;if(!v.trim()){toast('HTMLを入力してください');return}if(v!==s.html){s.previousHtml=s.html;s.html=v}await put();$('runner').srcdoc=s.html;drawerClose();stage('run');toast('HTMLを保存しました')}
+async function share(){let text='次の修正を実施して全コードを提供してください。\n\n'+memoBullet(s.memo);try{await navigator.clipboard.writeText(text)}catch{toast('コピーできませんでした');return}let f=new File([s.html],(s.name||'app')+'.html',{type:'text/html'});try{if(navigator.share&&navigator.canShare?.({files:[f]})){await navigator.share({title:'HTML改善依頼',text,files:[f]});toast('共有画面を開きました')}else{download(f,f.name);toast('依頼文をコピーしHTMLを保存しました')}}catch(e){if(e.name!=='AbortError')toast('共有に失敗しました。依頼文はコピー済みです')}}
+async function exportBackup(){let o={format:'html-app-manager-backup',version:2,exportedAt:new Date().toISOString(),app:s,localStorage:localData(),limitations:['HTML側IndexedDBは汎用バックアップ対象外','localStorageは同一オリジンで参照できる範囲']};download(new Blob([JSON.stringify(o,null,2)],{type:'application/json'}),`バックアップ(${s.name||'OneApp'}).json`);toast('バックアップを書き出しました')}
+async function importBackup(f){try{let o=JSON.parse(await f.text());if(o.format!=='html-app-manager-backup'||!o.app||typeof o.app.html!=='string')throw Error('対応していないファイルです');if(!confirm('現在の内容を上書きして復元しますか？'))return;s={...s,...o.app};await put();if(o.localStorage&&confirm('バックアップ内のlocalStorageも復元しますか？'))for(let[k,v]of Object.entries(o.localStorage))if(typeof v==='string')localStorage.setItem(k,v);render();toast('復元しました。IndexedDBの実行データは対象外です')}catch(e){alert('復元できませんでした：'+e.message)}}
+
+$('setupName').addEventListener('input',()=>{s.name=$('setupName').value.trim();meta()});
+$('iconFile').onchange=e=>chooseIcon(e.target.files?.[0]);
+
+$('firstSave').onclick=async()=>{let v=$('htmlSetup').value;if(!v.trim()){toast('HTMLを入力してください');return}s.html=v;s.previousHtml='';s.memo='';await put();render();toast('HTMLを登録しました')};
+
+$('htmlSetup').addEventListener('input',counts);$('htmlCode').addEventListener('input',counts);
+$('saveHtml').onclick=()=>saveHtml().catch(e=>toast('保存に失敗しました：'+e.message));
+$('copyHtml').onclick=async()=>{try{await navigator.clipboard.writeText($('htmlCode').value);toast('HTMLをコピーしました')}catch{toast('コピーできませんでした')}};
+$('clearHtml').onclick=()=>{$('htmlCode').value='';counts();toast('編集欄をクリアしました')};
+$('restoreHtml').onclick=()=>{if(!s.previousHtml){toast('戻せる履歴がありません');return}if(confirm('直前のHTMLを編集欄に戻しますか？')){$('htmlCode').value=s.previousHtml;counts()}};
+
+/* 改善メモ：入力・Enter・貼り付け・フォーカスアウトで「・」を揃える */
+const memoTa=$('memo');
+function saveMemoSoon(){clearTimeout(memoTimer);memoTimer=setTimeout(()=>{s.memo=$('memo').value;put().catch(()=>toast('メモを保存できませんでした'))},500)}
+memoTa.addEventListener('input',()=>{counts()});
+memoTa.addEventListener('focus',()=>{
+  if(!memoTa.value.trim()){memoTa.value='・';counts();saveMemoSoon();try{memoTa.setSelectionRange(1,1)}catch(e){}}
+});
+memoTa.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return;
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const pos=memoTa.selectionStart,end=memoTa.selectionEnd,ins='\n・';
+    memoTa.value=memoTa.value.slice(0,pos)+ins+memoTa.value.slice(end);
+    const np=pos+ins.length;
+    try{memoTa.setSelectionRange(np,np)}catch(err){}
+    counts();saveMemoSoon();
+  }
+});
+memoTa.addEventListener('paste',e=>{
+  const t=(e.clipboardData||window.clipboardData).getData('text')||'';
+  const remain=10000-memoTa.value.length;
+  if(t.length>remain){e.preventDefault();toast('最大10,000文字です。超過分は貼り付けませんでした')}
+  setTimeout(()=>{const v=memoBullet(memoTa.value);if(v!==memoTa.value){memoTa.value=v;counts();saveMemoSoon()}},0);
+});
+memoTa.addEventListener('blur',()=>{
+  const v=memoBullet(memoTa.value);
+  if(v!==memoTa.value){memoTa.value=v;counts()}
+  s.memo=memoTa.value;put().catch(()=>toast('メモを保存できませんでした'));
+});
+$('clearMemo').onclick=async()=>{if(confirm('改善メモをすべて削除しますか？')){memoTa.value='・';s.memo='・';counts();await put();toast('メモをクリアしました')}};
+$('improve').onclick=share;
+$('export').onclick=exportBackup;$('import').onclick=()=>$('backupFile').click();$('backupFile').onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);e.target.value=''};
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>tab(b.dataset.panel));$('close').onclick=drawerClose;$('shade').onclick=drawerClose;
+$('edge').addEventListener('pointerdown',e=>{ex=e.clientX;ey=e.clientY;$('edge').classList.add('pull')});
+$('edge').addEventListener('pointerup',e=>{if(ex!==null){const dx=ex-e.clientX,dy=ey-e.clientY;if(dx>10||(Math.abs(dx)<10&&Math.abs(dy)<10))drawerOpen()}ex=null;ey=null;$('edge').classList.remove('pull')});
+$('edge').addEventListener('pointercancel',()=>{ex=null;ey=null;$('edge').classList.remove('pull')});
+let swipe=null;$('drawer').addEventListener('touchstart',e=>{if(e.touches.length===1)swipe={x:e.touches[0].clientX,y:e.touches[0].clientY}},{passive:true});$('drawer').addEventListener('touchend',e=>{if(!swipe)return;let dx=e.changedTouches[0].clientX-swipe.x,dy=e.changedTouches[0].clientY-swipe.y;if(dx>75&&Math.abs(dx)>Math.abs(dy))drawerClose();swipe=null},{passive:true});
+(async()=>{try{db=await openDB();let old=await get();if(old)s={...s,...old};render()}catch(e){document.body.classList.remove('booting');toast('初期化に失敗しました：'+e.message)}})();
+})();
+</script></body></html>
